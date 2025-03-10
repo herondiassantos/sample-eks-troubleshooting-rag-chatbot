@@ -1,6 +1,8 @@
 import boto3
 import json
-    
+import requests
+import os
+
 def invoke_claude(prompt_text):
     """
     Invokes the Claude model via Bedrock with the given prompt text.
@@ -41,3 +43,61 @@ def invoke_claude(prompt_text):
     response_text = response_body['content'][0]['text']
     
     return response_text
+
+def invoke_deepseek_vllm(prompt_text):
+    url = os.getenv("VLLM_ENDPOINT", "http://localhost:8081")
+    url_complete = f"{url}/v1/chat/completions"
+    
+    headers = {
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "model": "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt_text
+            }
+        ]
+    }
+
+    try:
+        response = requests.post(url_complete, headers=headers, json=payload)
+        
+        # Print detailed debug information
+        print(f"Request URL: {url_complete}")
+        print(f"Request Headers: {headers}")
+        print(f"Request Payload: {json.dumps(payload, indent=2)}")
+        print(f"Response Status Code: {response.status_code}")
+        print(f"Response Headers: {dict(response.headers)}")
+        
+        try:
+            print(f"Response Body: {response.text}")
+        except:
+            print("Could not print response body")
+
+        response.raise_for_status()
+        
+        result = response.json()
+        
+        if "choices" in result and len(result["choices"]) > 0:
+            return result["choices"][0]["message"]["content"]
+        else:
+            return "No response content found"
+
+    except requests.exceptions.RequestException as e:
+        error_msg = f"Error making request to vLLM: {str(e)}"
+        if hasattr(e.response, 'text'):
+            error_msg += f"\nResponse body: {e.response.text}"
+        print(error_msg)
+        return f"Error: {str(e)}"
+    except json.JSONDecodeError as e:
+        print(f"Error decoding JSON response: {str(e)}")
+        return f"Error decoding response: {str(e)}"
+    except Exception as e:
+        print(f"Unexpected error: {str(e)}")
+        return f"Unexpected error: {str(e)}"
+
+
+    

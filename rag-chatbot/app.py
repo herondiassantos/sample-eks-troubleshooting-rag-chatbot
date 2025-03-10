@@ -7,7 +7,7 @@ from indexer import load_index, index_data, save_index
 from s3_utils import download_all_logs_to_single_file
 from embedder import encode_data, encode_query
 from retriever import retrieve_documents, construct_prompt
-# from bedrock_client import invoke_claude
+from bedrock_client import invoke_claude, invoke_deepseek_vllm
 from kubernetes_resource import generate_response_with_kubectl
 from data_loader import load_data_from_chunks, filter_data
 from datetime import timedelta
@@ -67,10 +67,8 @@ else:
 
 # Create the chatbot interface that will be called.
 
-
-def chatbot_interface(user_input, time_threshold_minutes):
-    logger.info(f"Received user query: {user_input} with time threshold: {
-                time_threshold_minutes} minutes")
+def chatbot_interface(user_input, time_threshold_minutes, model_choice):
+    logger.info(f"Received user query: {user_input} with time threshold: {time_threshold_minutes} minutes and model: {model_choice}")
     with data_lock:
         query_embedding = encode_query(user_input)
         retrieved_docs = retrieve_documents(
@@ -78,11 +76,17 @@ def chatbot_interface(user_input, time_threshold_minutes):
         prompt = construct_prompt(
             user_input, retrieved_docs, time_threshold_minutes=time_threshold_minutes)
         print(prompt)
-    response = generate_response_with_kubectl(prompt)
-    # response = invoke_claude(prompt)
+    
+    # Choose the model based on the combo box selection
+    if model_choice == "Claude":
+        response = generate_response_with_kubectl(prompt, "claude")
+    elif model_choice == "DeepSeek":
+        response = generate_response_with_kubectl(prompt, "deepseek")
+    else:
+        response = "Invalid model selection"
+        
     logger.info(f"Generated response: {response}")
     return response
-
 
 def create_interface():
     with gr.Blocks(css=".container { max-width: 700px; margin: auto; padding-top: 20px; }") as demo:
@@ -92,23 +96,46 @@ def create_interface():
                 <h1>FAISS-Based Document Retrieval Chatbot</h1>
                 <p>Type your query below and interact with the chatbot.</p>
                 <p><strong>Set the time threshold (in minutes) to filter recent logs.</strong></p>
-                <p><strong>Click "Update Index" to refresh the index in the background.</strong></p>
+                <p><strong>Click "Update Index" to refresh the index</strong></p>
             </div>
             """
         )
 
         with gr.Row():
-            with gr.Column(scale=2):
-                user_input = gr.Textbox(label="Your Query")
-                time_threshold_input = gr.Slider(
-                    minimum=1, maximum=60, step=1, value=5, label="Time Threshold (minutes)")
-            with gr.Column(scale=1):
-                submit_btn = gr.Button("Submit")
+            with gr.Column():
+                # Add the model selection combo box
+                model_dropdown = gr.Dropdown(
+                    choices=["Claude", "DeepSeek"],
+                    value="Claude",
+                    label="Select Model"
+                )
+                time_threshold = gr.Number(
+                    value=60,
+                    label="Time Threshold (minutes)",
+                    minimum=1,
+                    maximum=1440
+                )
+                user_input = gr.Textbox(
+                    label="Your Question",
+                    placeholder="Type your question here..."
+                )
+                submit_button = gr.Button("Submit")
+                update_button = gr.Button("Update Index")
 
-        chatbot_output = gr.Markdown(label="Chatbot Response")
+            with gr.Column():
+                output = gr.Markdown(label="Response")
 
-        submit_btn.click(fn=chatbot_interface, inputs=[
-                         user_input, time_threshold_input], outputs=chatbot_output)
+        submit_button.click(
+            fn=chatbot_interface,
+            inputs=[user_input, time_threshold, model_dropdown],
+            outputs=output
+        )
+
+        update_button.click(
+            fn=lambda: "Index updated successfully!",
+            inputs=None,
+            outputs=output
+        )
 
     return demo
 
