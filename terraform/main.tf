@@ -8,7 +8,7 @@
 # }
 locals {
   name   = var.name
-  region = "us-east-1"
+  region = "us-west-2"
 
   vpc_cidr = "10.0.0.0/16"
   azs      = slice(data.aws_availability_zones.available.names, 0, 3)
@@ -79,7 +79,7 @@ module "eks" {
   version = "~> 20.11"
 
   cluster_name                   = local.name
-  cluster_version                = "1.30"
+  cluster_version                = "1.31"
   cluster_endpoint_public_access = true
 
   vpc_id     = module.vpc.vpc_id
