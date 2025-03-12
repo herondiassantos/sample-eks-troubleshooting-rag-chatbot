@@ -3,12 +3,7 @@ import pytz
 from opensearchpy import OpenSearch, RequestsHttpConnection
 from requests_aws4auth import AWS4Auth
 import boto3
-import logging
 import os
-
-logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
 
 # Define UTC timezone
 utc = pytz.utc
@@ -37,7 +32,7 @@ client = OpenSearch(
 )
 
 
-def retrieve_documents(query_embedding, index_name, top_k=5):
+def retrieve_documents(logger, query_embedding, index_name, top_k=5):
     # Perform the search using the query embedding
     query_body = {
         "query": {"knn": {"embedding": {"vector": query_embedding, "k": top_k}}},

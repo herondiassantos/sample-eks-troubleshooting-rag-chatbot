@@ -50,7 +50,7 @@ This script will create various pods that are likely to generate errors and logs
 ### Step 3: Configure Environment Variables
 The chatbot uses an environment variables to determine the behavior of the application. Set these before running the chatbot.
 - **OPENSEARCH_ENDPOINT**:  The OpenSearch endpoint provided as an output from the terraform apply.
-
+- **AWS_DEFAULT_REGION**: The region to be used by the ChatBot
 
 ### Step 4: Run the Chatbot
 
