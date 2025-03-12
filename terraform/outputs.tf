@@ -3,8 +3,7 @@ output "configure_kubectl" {
   value       = "aws eks --region ${local.region} update-kubeconfig --name ${module.eks.cluster_name}"
 }
 
-# Bucket name output
-output "bucket_name" {
-  description = "Name of the S3 bucket"
-  value       = aws_s3_bucket.bucket.id
+output "opensearch_serverless_collection_endpoint" {
+  description = "Endpoint of the OpenSearch Serverless collection"
+  value       = module.ingestion_pipeline.collection_endpoint
 }

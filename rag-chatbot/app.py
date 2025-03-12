@@ -1,23 +1,11 @@
 import gradio as gr
-import threading
-import asyncio
 import logging
-import os
-from indexer import load_index, index_data, save_index
-from s3_utils import download_all_logs_to_single_file
-from embedder import encode_data, encode_query
+from datetime import datetime
+from embedder import encode_query
 from retriever import retrieve_documents, construct_prompt
-from bedrock_client import invoke_claude, invoke_deepseek_vllm
 from kubernetes_resource import generate_response_with_kubectl
-from data_loader import load_data_from_chunks, filter_data
-from datetime import timedelta
 
 # Constants
-INDEX_PATH = 'faiss_index.index'
-CHUNKS_DIR = 'data_chunks/'
-DOWNLOAD_DATA = os.getenv("DOWNLOAD_DATA", 'True')
-bucket_name = os.getenv("BUCKET_NAME", 'eks-llm-troubleshooting-logs-rag-eks')
-prefix = os.getenv("PREFIX")
 top_k = 3
 
 # Set up logging
@@ -25,57 +13,20 @@ logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Lock for thread-safe data access
-data_lock = threading.Lock()
-
-logger.info("Loading index from disk...")
-index = load_index(INDEX_PATH)
-
-# If not index or data, download it
-if DOWNLOAD_DATA:
-    if not os.path.exists(CHUNKS_DIR):
-        logger.warning(f"Chunks directory {
-                       CHUNKS_DIR} not found, downloading from S3...")
-        download_all_logs_to_single_file(
-            bucket_name, prefix, CHUNKS_DIR, logger)
-
-data = load_data_from_chunks(CHUNKS_DIR, logger)
-
-exclusion_keywords = []
-limit_per_keyword = {}
-filtered_data = filter_data(data, exclusion_keywords=exclusion_keywords,
-                            limit_per_keyword=limit_per_keyword, logger=logger)
-
-if not filtered_data:
-    logger.error(
-        "No data found after filtering. Please check the S3 bucket and data files.")
-    raise ValueError("No data loaded from chunks after filtering.")
-
-if not index or not filtered_data or DOWNLOAD_DATA:
-    logger.warning("Index or data not found, processing chunks...")
-    embeddings = encode_data(filtered_data)
-    if embeddings is None or len(embeddings) == 0:
-        logger.error(
-            "Failed to encode data. The data might be empty or invalid.")
-        raise ValueError("Failed to encode data.")
-
-    index = index_data(embeddings, INDEX_PATH)
-    save_index(index, INDEX_PATH)
-    logger.info("Index created and data saved locally.")
-else:
-    logger.info("Index and data loaded from disk.")
-
 # Create the chatbot interface that will be called.
+def chatbot_interface(user_input, model_choice, index_date):
+    # Transform to the desired format YYYYMMDD
+    formatted_date = index_date.strftime("%Y%m%d")
+    index_name = f"eks-cluster-{formatted_date}"
+    logger.info(f"Received user query for date: {index_date.strftime("%Y-%m-%d")}, model: {model_choice}, and user input: {user_input}")
+    query_embedding = encode_query(user_input)
 
-def chatbot_interface(user_input, time_threshold_minutes, model_choice):
-    logger.info(f"Received user query: {user_input} with time threshold: {time_threshold_minutes} minutes and model: {model_choice}")
-    with data_lock:
-        query_embedding = encode_query(user_input)
-        retrieved_docs = retrieve_documents(
-            query_embedding, index, filtered_data, top_k=top_k)
-        prompt = construct_prompt(
-            user_input, retrieved_docs, time_threshold_minutes=time_threshold_minutes)
-        print(prompt)
+    retrieved_docs = retrieve_documents(
+        query_embedding, index_name=index_name, top_k=top_k)
+
+    prompt = construct_prompt(
+        user_input, retrieved_docs)
+    logger.info(f"Troubleshooting Prompt: {prompt}")
     
     # Choose the model based on the combo box selection
     if model_choice == "Claude":
@@ -89,51 +40,47 @@ def chatbot_interface(user_input, time_threshold_minutes, model_choice):
     return response
 
 def create_interface():
+    current_date = datetime.now().date()
+    current_date_str = current_date.strftime("%Y-%m-%d")
+
     with gr.Blocks(css=".container { max-width: 700px; margin: auto; padding-top: 20px; }") as demo:
         gr.Markdown(
             """
             <div style="text-align: center;">
-                <h1>FAISS-Based Document Retrieval Chatbot</h1>
-                <p>Type your query below and interact with the chatbot.</p>
-                <p><strong>Set the time threshold (in minutes) to filter recent logs.</strong></p>
-                <p><strong>Click "Update Index" to refresh the index</strong></p>
+                <h1>Document Retrieval Chatbot</h1>
             </div>
             """
         )
 
         with gr.Row():
             with gr.Column():
+                index_date = gr.DateTime(
+                    label="Select Date",
+                    type="datetime",
+                    include_time=False,
+                    value=current_date_str,
+                    info="Select the date to query logs"
+                )
+
                 # Add the model selection combo box
                 model_dropdown = gr.Dropdown(
                     choices=["Claude", "DeepSeek"],
                     value="Claude",
                     label="Select Model"
                 )
-                time_threshold = gr.Number(
-                    value=60,
-                    label="Time Threshold (minutes)",
-                    minimum=1,
-                    maximum=1440
-                )
+
                 user_input = gr.Textbox(
                     label="Your Question",
                     placeholder="Type your question here..."
                 )
                 submit_button = gr.Button("Submit")
-                update_button = gr.Button("Update Index")
 
             with gr.Column():
                 output = gr.Markdown(label="Response")
 
         submit_button.click(
             fn=chatbot_interface,
-            inputs=[user_input, time_threshold, model_dropdown],
-            outputs=output
-        )
-
-        update_button.click(
-            fn=lambda: "Index updated successfully!",
-            inputs=None,
+            inputs=[user_input, model_dropdown, index_date],
             outputs=output
         )
 

@@ -100,8 +100,7 @@ def generate_response_with_kubectl(prompt_text, model_option="deepseek"):
             initial_response + "\n\n" + "\n".join(kubectl_output)
 
         # Step 4: Pass the combined result back to Claude for interpretation
-        followup_prompt = f"{
-            combined_output}\n\nPlease interpret the kubectl output above without issuing new kubectl commands."
+        followup_prompt = f"{combined_output}\n\nPlease interpret the kubectl output above without issuing new kubectl commands."
 
         # Step 5: Invoke Claude again with the combined response and kubectl results
         final_response = ""

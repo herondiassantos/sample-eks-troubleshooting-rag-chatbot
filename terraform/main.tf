@@ -1,11 +1,3 @@
-# terraform {
-#   backend "s3" {
-#     bucket = "eks-rag-troubleshooting-tfstate-emand"
-#     key    = "terraform.tfstate"
-#     region = "us-east-1"
-
-#   }
-# }
 locals {
   name   = var.name
   region = "us-west-2"
@@ -23,11 +15,9 @@ provider "aws" {
   region = local.region
 }
 
-# This provider is required for ECR to autheticate with public repos. Please note ECR authetication requires us-east-1 as region hence its hardcoded below.
-# If your region is same as us-east-1 then you can just use one aws provider
 provider "aws" {
   alias  = "ecr"
-  region = "us-east-1"
+  region = "us-west-2"
 }
 
 provider "kubernetes" {
@@ -53,6 +43,11 @@ provider "helm" {
       # This requires the awscli to be installed locally where Terraform is executed
       args = ["eks", "get-token", "--cluster-name", module.eks.cluster_name]
     }
+  }
+  registry {
+    url = "oci://public.ecr.aws"
+    username = "AWS"
+    password = data.aws_ecrpublic_authorization_token.token.password
   }
 }
 
@@ -178,7 +173,7 @@ module "eks_blueprints_addons" {
             create: true
             nodeAccess: true
             eventsAccess: true
-          
+
           config:
             inputs: |
                 [INPUT]
@@ -211,10 +206,10 @@ module "eks_blueprints_addons" {
                     K8S-Logging.Exclude On
             outputs: |
                 [OUTPUT]
-                    Name            kinesis_firehose
+                    Name            kinesis_streams
                     Match           *
                     region          ${local.region}
-                    delivery_stream ${local.name}-delivery-stream-eks-logs
+                    stream ${local.name}-eks-logs
                     time_key        time
                     time_key_format %Y-%m-%dT%H:%M:%S
             customParsers: |
@@ -454,4 +449,15 @@ module "vpc" {
   }
 
   tags = local.tags
+}
+
+################################################################################
+# Logs Ingestion Pipeline
+################################################################################
+
+module "ingestion_pipeline" {
+  source = "./modules/ingestion-pipeline"
+  name = var.name
+  collection_name = var.opensearch_collection_name
+  region = local.region
 }

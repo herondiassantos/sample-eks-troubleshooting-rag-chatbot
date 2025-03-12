@@ -1,14 +1,22 @@
-from sentence_transformers import SentenceTransformer
-import numpy as np
+import boto3
+import json
 
-model = SentenceTransformer('all-MiniLM-L12-v2')
 
-# Function to encode data
-def encode_data(data):
-    embeddings = model.encode(data, convert_to_tensor=False)
-    return np.array(embeddings).astype('float32')
-
-# Function to encode a single query
 def encode_query(query):
-    query_embedding = model.encode([query], convert_to_tensor=False)
-    return np.array(query_embedding).astype('float32')
+    # Initialize Bedrock client
+    bedrock_runtime = boto3.client(
+        service_name='bedrock-runtime'
+    )
+
+    # Call Bedrock to generate embedding
+    response = bedrock_runtime.invoke_model(
+        modelId="amazon.titan-embed-text-v2:0",
+        contentType="application/json",
+        accept="application/json",
+        body=json.dumps({"inputText": query})
+    )
+
+    # Extract embedding from response
+    embedding = json.loads(response.get('body').read())['embedding']
+
+    return embedding
