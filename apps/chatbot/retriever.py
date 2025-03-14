@@ -32,13 +32,35 @@ client = OpenSearch(
     connection_class=RequestsHttpConnection
 )
 
-
-def retrieve_documents(query_embedding, index_name, top_k=5):
+def retrieve_documents(query_embedding, index_name, top_k=5, min_score=0.7):
     # Perform the search using the query embedding
     query_body = {
-        "query": {"knn": {"embedding": {"vector": query_embedding, "k": top_k}}},
+        "query": {
+            "bool": {
+                "must": [
+                    {
+                        "knn": {
+                            "embedding": {
+                                "vector": query_embedding,
+                                "k": top_k
+                            }
+                        }
+                    }
+                ],
+                "filter": [
+                    {
+                        "range": {
+                            "_score": {
+                                "gte": min_score
+                            }
+                        }
+                    }
+                ]
+            }
+        },
         "_source": False,
         "fields": ["id", "log"],
+        "size": top_k
     }
 
     results = client.search(
@@ -47,27 +69,22 @@ def retrieve_documents(query_embedding, index_name, top_k=5):
     )
 
     if results["hits"]["total"]["value"] > 0:
-        docs = [doc for hit in results["hits"]["hits"] for doc in hit["fields"]["log"]]
+        docs = [hit["fields"]["log"][0] for hit in results["hits"]["hits"]]
         return docs
     else:
         logger.error("No match for the prompt found in the vector database")
 
 
-def construct_prompt(query, retrieved_docs, max_docs=5):
-    # Get the current time in UTC
-    current_utc_time = datetime.now(utc).isoformat()
-
+def construct_prompt(query, retrieved_docs):
     # Limit the number of documents in the context to max_docs
-    context_docs = retrieved_docs[:max_docs]
 
-    if not context_docs:
+    if not retrieved_docs:
         context = "No relevant logs found."
     else:
-        context = "\n\n".join(context_docs)
+        context = "\n\n".join(retrieved_docs)
 
     # Create a prompt to generate a kubectl command to get more details if needed 
     kubectl_prompt = "When needed Generate a kubectl command to get more details about the relevant logs, use a key 'KUBECTL_COMMAND: command' if true for to parse, make sure that you have real pod names not templates"
     # Construct the final prompt
     prompt = f"Instructions: {kubectl_prompt} \n\nUser Query: {query} \n\nContext:\n{context}\n\nResponse:"
-    # prompt = f"Instructions: {kubectl_prompt} \n\nUser Query: {query} \n\nCheck if the log time is within last {time_threshold_minutes} minutes \n\nCurrent UTC Time: {current_utc_time}\n\nContext:\n{context}\n\nResponse:"
     return prompt

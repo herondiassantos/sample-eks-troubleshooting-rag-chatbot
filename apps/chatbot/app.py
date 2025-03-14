@@ -5,9 +5,6 @@ from embedder import encode_query
 from retriever import retrieve_documents, construct_prompt
 from kubernetes_resource import generate_response_with_kubectl
 
-# Constants
-top_k = 3
-
 # Create the chatbot interface that will be called.
 def chatbot_interface(user_input, model_choice, index_date):
     # Transform to the desired format YYYYMMDD
@@ -16,8 +13,7 @@ def chatbot_interface(user_input, model_choice, index_date):
     logger.info(f"Received user query for date: {index_date.strftime("%Y-%m-%d")}, model: {model_choice}, and user input: {user_input}")
     query_embedding = encode_query(user_input)
 
-    retrieved_docs = retrieve_documents(query_embedding=query_embedding, index_name=index_name,
-                                        top_k=top_k)
+    retrieved_docs = retrieve_documents(query_embedding=query_embedding, index_name=index_name)
 
     prompt = construct_prompt(query=user_input, retrieved_docs=retrieved_docs)
     logger.info(f"Troubleshooting Prompt: {prompt}")
