@@ -29,10 +29,8 @@ def chatbot_interface(user_input, model_choice, index_date):
     logger.info(f"Generated response: {response}")
     return response
 
-def create_interface():
-    current_date = datetime.now().date()
-    current_date_str = current_date.strftime("%Y-%m-%d")
 
+def create_interface():
     with gr.Blocks(css=".container { max-width: 700px; margin: auto; padding-top: 20px; }") as demo:
         gr.Markdown(
             """
@@ -48,7 +46,6 @@ def create_interface():
                     label="Select Date",
                     type="datetime",
                     include_time=False,
-                    value=current_date_str,
                     info="Select the date to query logs"
                 )
 

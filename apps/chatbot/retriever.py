@@ -32,7 +32,7 @@ client = OpenSearch(
     connection_class=RequestsHttpConnection
 )
 
-def retrieve_documents(query_embedding, index_name, top_k=5, min_score=0.7):
+def retrieve_documents(query_embedding, index_name, top_k=5, min_score=0.4):
     # Perform the search using the query embedding
     query_body = {
         "query": {
@@ -46,21 +46,13 @@ def retrieve_documents(query_embedding, index_name, top_k=5, min_score=0.7):
                             }
                         }
                     }
-                ],
-                "filter": [
-                    {
-                        "range": {
-                            "_score": {
-                                "gte": min_score
-                            }
-                        }
-                    }
                 ]
             }
         },
         "_source": False,
         "fields": ["id", "log"],
-        "size": top_k
+        "size": top_k,
+        "min_score": min_score
     }
 
     results = client.search(

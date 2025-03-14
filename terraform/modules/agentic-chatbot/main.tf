@@ -116,6 +116,7 @@ resource "null_resource" "docker_push" {
     embedder = filemd5("${path.module}/../../../apps/chatbot/embedder.py")
     kubernetes_resource = filemd5("${path.module}/../../../apps/chatbot/kubernetes_resource.py")
     retriever = filemd5("${path.module}/../../../apps/chatbot/retriever.py")
+    logger = filemd5("${path.module}/../../../apps/chatbot/logger.py")
   }
 
   provisioner "local-exec" {
