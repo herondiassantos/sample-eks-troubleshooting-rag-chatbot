@@ -2,6 +2,7 @@ import re
 import subprocess
 import shlex
 from bedrock_client import invoke_claude, invoke_deepseek_vllm
+from logger import logger
 
 
 def extract_kubectl_commands(response_text):
@@ -87,7 +88,7 @@ def generate_response_with_kubectl(prompt_text, model_option="deepseek"):
 
     # Step 2: Extract any kubectl commands from the model's response
     kubectl_commands = extract_kubectl_commands(initial_response)
-    print(kubectl_commands)
+    logger.debug(kubectl_commands)
     # Step 3: If kubectl commands are found, execute them
     kubectl_output = []
     if kubectl_commands:

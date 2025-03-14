@@ -1,5 +1,5 @@
 import gradio as gr
-import logging
+from logger import logger
 from datetime import datetime
 from embedder import encode_query
 from retriever import retrieve_documents, construct_prompt
@@ -7,11 +7,6 @@ from kubernetes_resource import generate_response_with_kubectl
 
 # Constants
 top_k = 3
-
-# Set up logging
-logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
 
 # Create the chatbot interface that will be called.
 def chatbot_interface(user_input, model_choice, index_date):
@@ -21,7 +16,7 @@ def chatbot_interface(user_input, model_choice, index_date):
     logger.info(f"Received user query for date: {index_date.strftime("%Y-%m-%d")}, model: {model_choice}, and user input: {user_input}")
     query_embedding = encode_query(user_input)
 
-    retrieved_docs = retrieve_documents(logger=logger, query_embedding=query_embedding, index_name=index_name,
+    retrieved_docs = retrieve_documents(query_embedding=query_embedding, index_name=index_name,
                                         top_k=top_k)
 
     prompt = construct_prompt(query=user_input, retrieved_docs=retrieved_docs)

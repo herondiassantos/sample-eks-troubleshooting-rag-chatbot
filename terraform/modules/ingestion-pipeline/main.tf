@@ -82,7 +82,6 @@ resource "aws_opensearchserverless_access_policy" "access_policy" {
         }
       ],
       Principal = [
-        "arn:aws:iam::205342331675:role/admin",
          aws_iam_role.lambda_role.arn
       ]
     }
@@ -120,13 +119,7 @@ resource "aws_lambda_event_source_mapping" "stream_lambda" {
 
   batch_size                         = 100
   maximum_batching_window_in_seconds = 60
-
-  # Enable enhanced fan-out consumer
-  amazon_managed_kafka_event_source_config {
-    consumer_group_id = "${var.name}-consumer"
-  }
 }
-
 
 ################################################################################
 # Kinesis Consumer - Lambda Function
@@ -261,9 +254,9 @@ resource "null_resource" "docker_push" {
   provisioner "local-exec" {
     working_dir = "${path.module}/lambda"
     command = <<EOF
-      aws ecr get-login-password --region ${var.region} | finch login --username AWS --password-stdin ${aws_ecr_repository.lambda_repo.repository_url}
-      finch build --platform=linux/amd64 -t ${aws_ecr_repository.lambda_repo.repository_url}:latest .
-      finch push ${aws_ecr_repository.lambda_repo.repository_url}:latest
+      aws ecr get-login-password --region ${var.region} | ${var.container_builder} login --username AWS --password-stdin ${aws_ecr_repository.lambda_repo.repository_url}
+      ${var.container_builder} build --platform=linux/amd64 -t ${aws_ecr_repository.lambda_repo.repository_url}:latest .
+      ${var.container_builder} push ${aws_ecr_repository.lambda_repo.repository_url}:latest
     EOF
   }
 
@@ -287,18 +280,4 @@ resource "aws_lambda_function" "processor" {
   }
 
   depends_on = [null_resource.docker_push]
-}
-
-################################################################################
-# Output
-################################################################################
-
-output "collection_endpoint" {
-  value = aws_opensearchserverless_collection.vector_db.collection_endpoint
-
-}
-
-# Output the ECR repository URL
-output "ecr_repository_url" {
-  value = aws_ecr_repository.lambda_repo.repository_url
 }

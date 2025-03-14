@@ -1,6 +1,7 @@
 locals {
   name   = var.name
-  region = "us-west-2"
+  region = "us-east-1"
+  container_builder = "docker"
 
   vpc_cidr = "10.0.0.0/16"
   azs      = slice(data.aws_availability_zones.available.names, 0, 3)
@@ -17,7 +18,7 @@ provider "aws" {
 
 provider "aws" {
   alias  = "ecr"
-  region = "us-west-2"
+  region = "us-east-1"
 }
 
 provider "kubernetes" {
@@ -460,4 +461,143 @@ module "ingestion_pipeline" {
   name = var.name
   collection_name = var.opensearch_collection_name
   region = local.region
+  container_builder = local.container_builder
+}
+
+################################################################################
+# Agentic ChatBot
+################################################################################
+
+module "agentic_chatbot" {
+  source = "./modules/agentic-chatbot"
+  name = var.name
+  collection_name = var.opensearch_collection_name
+  collection_arn = module.ingestion_pipeline.collection_arn
+  region = local.region
+  eks_cluster_oidc_arn = module.eks.oidc_provider_arn
+  container_builder = local.container_builder
+  depends_on = [module.ingestion_pipeline]
+}
+
+resource "helm_release" "agentic-chatbot" {
+  name             = "agentic-chatbot"
+  chart            = "./manifests/chatbot-chart"
+  create_namespace = true
+  wait             = true
+  replace          = true
+  namespace        = "agentic-chatbot"
+
+  values = [
+    <<-EOT
+    logLevel: INFO
+    image:
+      repository: ${module.agentic_chatbot.chatbot_ecr_repo}
+      pullPolicy: Always
+      tag: "latest"
+    serviceAccount:
+      create: true
+      annotations:
+        eks.amazonaws.com/role-arn: ${module.agentic_chatbot.chatbot_role_arn}
+    aws:
+      region: ${local.region}
+      role: ${module.agentic_chatbot.chatbot_role_arn}
+      opensearch_endpoint: ${replace(module.ingestion_pipeline.collection_endpoint,"/(^https://)|(/$)/","")}
+    resources:
+      limits:
+        cpu: "1000m"
+        memory: 2Gi
+      requests:
+        cpu: "500m"
+        memory: 1Gi
+    service:
+      type: ClusterIP
+      port: 7860
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+    fullnameOverride: agentic-chatbot
+    EOT
+  ]
+  depends_on = [module.eks, helm_release.karpenter, module.ingestion_pipeline, module.agentic_chatbot]
+}
+
+################################################################################
+# Karpenter NodePool and NodeClass
+################################################################################
+
+# Deploy default Karpenter resources using Helm
+
+resource "helm_release" "karpenter_default" {
+  name       = "karpenter-default"
+  chart      = "${path.module}/manifests/karpenter-chart"
+  namespace  = "default"
+  wait       = false
+  depends_on = [module.eks, module.karpenter, helm_release.karpenter]
+  # Set the cluster name for all resources
+  set {
+    name  = "clusterName"
+    value = local.name
+  }
+}
+# Deploy GPU Karpenter resources using Helm
+resource "helm_release" "karpenter_gpu" {
+  name       = "karpenter-gpu"
+  chart      = "${path.module}/manifests/karpenter-chart"
+  namespace  = "default"
+  wait       = false
+  values     = [file("${path.module}/manifests/karpenter-chart/values-gpu.yaml")]
+  depends_on = [module.eks, module.karpenter, helm_release.karpenter]
+  # Set the cluster name for all resources
+  set {
+    name  = "clusterName"
+    value = local.name
+  }
+}
+
+
+################################################################################
+# DeepSeek Deployment using vLLM
+################################################################################
+
+resource "helm_release" "deepseek_gpu" {
+  name             = "deepseek-gpu"
+  chart            = "./manifests/vllm-chart"
+  create_namespace = true
+  wait             = false
+  replace          = true
+  namespace        = "deepseek"
+
+  values = [
+    <<-EOT
+    nodeSelector:
+      owner: "data-engineer"
+    tolerations:
+      - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+    resources:
+      limits:
+        cpu: "32"
+        memory: 100G
+        nvidia.com/gpu: "1"
+      requests:
+        cpu: "16"
+        memory: 30G
+        nvidia.com/gpu: "1"
+    command: "vllm serve deepseek-ai/DeepSeek-R1-Distill-Llama-8B --max-model-len 4096"
+    EOT
+  ]
+  depends_on = [module.eks, helm_release.karpenter_gpu, helm_release.karpenter]
+}
+
+resource "helm_release" "nvidia_device_plugin" {
+  name             = "nvidia-device-plugin"
+  repository       = "https://nvidia.github.io/k8s-device-plugin"
+  chart            = "nvidia-device-plugin"
+  version          = "0.17.0"
+  namespace        = "nvidia-device-plugin"
+  create_namespace = true
+  wait             = true
+
+  depends_on = [module.eks, helm_release.karpenter]
 }

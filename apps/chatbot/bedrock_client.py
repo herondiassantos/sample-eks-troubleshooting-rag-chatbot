@@ -2,6 +2,7 @@ import boto3
 import json
 import requests
 import os
+from logger import logger
 
 def invoke_claude(prompt_text):
     """
@@ -65,17 +66,17 @@ def invoke_deepseek_vllm(prompt_text):
     try:
         response = requests.post(url_complete, headers=headers, json=payload)
         
-        # Print detailed debug information
-        print(f"Request URL: {url_complete}")
-        print(f"Request Headers: {headers}")
-        print(f"Request Payload: {json.dumps(payload, indent=2)}")
-        print(f"Response Status Code: {response.status_code}")
-        print(f"Response Headers: {dict(response.headers)}")
+        # Log detailed debug information
+        logger.debug(f"Request URL: {url_complete}")
+        logger.debug(f"Request Headers: {headers}")
+        logger.debug(f"Request Payload: {json.dumps(payload, indent=2)}")
+        logger.debug(f"Response Status Code: {response.status_code}")
+        logger.debug(f"Response Headers: {dict(response.headers)}")
         
         try:
-            print(f"Response Body: {response.text}")
+            logger.info(f"Response Body: {response.text}")
         except:
-            print("Could not print response body")
+            logger.error("Could not print response body")
 
         response.raise_for_status()
         
@@ -90,13 +91,13 @@ def invoke_deepseek_vllm(prompt_text):
         error_msg = f"Error making request to vLLM: {str(e)}"
         if hasattr(e.response, 'text'):
             error_msg += f"\nResponse body: {e.response.text}"
-        print(error_msg)
+        logger.error(error_msg)
         return f"Error: {str(e)}"
     except json.JSONDecodeError as e:
-        print(f"Error decoding JSON response: {str(e)}")
+        logger.error(f"Error decoding JSON response: {str(e)}")
         return f"Error decoding response: {str(e)}"
     except Exception as e:
-        print(f"Unexpected error: {str(e)}")
+        logger.error(f"Unexpected error: {str(e)}")
         return f"Unexpected error: {str(e)}"
 
 
