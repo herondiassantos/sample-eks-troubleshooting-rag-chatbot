@@ -205,6 +205,10 @@ module "eks_blueprints_addons" {
                     Keep_Log            On
                     K8S-Logging.Parser  On
                     K8S-Logging.Exclude On
+                [FILTER]
+                    Name                grep
+                    Match               kube.*
+                    Exclude             $kubernetes['labels']['application'] agentic-chatbot
             outputs: |
                 [OUTPUT]
                     Name            kinesis_streams
