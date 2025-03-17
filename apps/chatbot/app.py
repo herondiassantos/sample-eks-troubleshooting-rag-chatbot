@@ -1,7 +1,7 @@
 import gradio as gr
 from logger import logger
 from datetime import datetime
-from embedder import encode_query
+from llm_client import encode_query
 from retriever import retrieve_documents, construct_prompt
 from kubernetes_resource import generate_response_with_kubectl
 
@@ -15,19 +15,22 @@ def chatbot_interface(user_input, model_choice, index_date):
 
     retrieved_docs = retrieve_documents(query_embedding=query_embedding, index_name=index_name)
 
-    prompt = construct_prompt(query=user_input, retrieved_docs=retrieved_docs)
-    logger.info(f"Troubleshooting Prompt: {prompt}")
-    
-    # Choose the model based on the combo box selection
-    if model_choice == "Claude":
-        response = generate_response_with_kubectl(prompt, "claude")
-    elif model_choice == "DeepSeek":
-        response = generate_response_with_kubectl(prompt, "deepseek")
+    if retrieved_docs is not None:
+        prompt = construct_prompt(query=user_input, retrieved_docs=retrieved_docs)
+        logger.info(f"Troubleshooting Prompt: {prompt}")
+
+        # Choose the model based on the combo box selection
+        if model_choice == "Claude":
+            response = generate_response_with_kubectl(prompt, "claude")
+        elif model_choice == "DeepSeek":
+            response = generate_response_with_kubectl(prompt, "deepseek")
+        else:
+            response = "Invalid model selection"
+
+        logger.info(f"Generated response: {response}")
+        return response
     else:
-        response = "Invalid model selection"
-        
-    logger.info(f"Generated response: {response}")
-    return response
+        return "No match for the prompt found in the vector database!"
 
 
 def create_interface():

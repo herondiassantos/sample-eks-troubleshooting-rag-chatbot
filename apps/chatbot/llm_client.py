@@ -4,6 +4,27 @@ import requests
 import os
 from logger import logger
 
+
+def encode_query(query):
+    # Initialize Bedrock client
+    bedrock_runtime = boto3.client(
+        service_name='bedrock-runtime'
+    )
+
+    # Call Bedrock to generate embedding
+    response = bedrock_runtime.invoke_model(
+        modelId="amazon.titan-embed-text-v2:0",
+        contentType="application/json",
+        accept="application/json",
+        body=json.dumps({"inputText": query})
+    )
+
+    # Extract embedding from response
+    embedding = json.loads(response.get('body').read())['embedding']
+
+    return embedding
+
+
 def invoke_claude(prompt_text):
     """
     Invokes the Claude model via Bedrock with the given prompt text.
@@ -46,7 +67,7 @@ def invoke_claude(prompt_text):
     return response_text
 
 def invoke_deepseek_vllm(prompt_text):
-    url = os.getenv("VLLM_ENDPOINT", "http://localhost:8081")
+    url = os.getenv("VLLM_ENDPOINT", "http://deepseek-gpu-vllm-chart.deepseek.svc.cluster.local:80")
     url_complete = f"{url}/v1/chat/completions"
     
     headers = {

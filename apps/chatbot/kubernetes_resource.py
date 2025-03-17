@@ -1,7 +1,7 @@
 import re
 import subprocess
 import shlex
-from bedrock_client import invoke_claude, invoke_deepseek_vllm
+from llm_client import invoke_claude, invoke_deepseek_vllm
 from logger import logger
 
 

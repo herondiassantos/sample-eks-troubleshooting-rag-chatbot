@@ -8,11 +8,11 @@ import os
 
 # Define UTC timezone
 utc = pytz.utc
-opensearch_endpoint = os.environ.get('OPENSEARCH_ENDPOINT')
 
 # Get credentials
 credentials = boto3.Session().get_credentials()
-region = 'us-east-1'
+region = os.environ.get('AWS_DEFAULT_REGION')
+opensearch_endpoint = os.environ.get('OPENSEARCH_ENDPOINT')
 
 # Create AWS4Auth instance
 auth = AWS4Auth(
