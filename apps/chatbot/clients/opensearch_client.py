@@ -15,6 +15,7 @@ class OpenSearchClient:
 
     def initialize_client(self):
         self.credentials = boto3.Session().get_credentials()
+        logger.debug("Refreshing OpenSearch credentials")
         auth = AWS4Auth(
             self.credentials.access_key,
             self.credentials.secret_key,
@@ -34,7 +35,6 @@ class OpenSearchClient:
     def check_and_refresh_credentials(self):
         """Check if credentials need to be refreshed and refresh if necessary"""
         if self.credentials.refresh_needed():
-            logger.debug("Refreshed OpenSearch credentials")
             self.initialize_client()
 
     def retrieve_documents(self, query_embedding, index_name, top_k=5, min_score=0.4):

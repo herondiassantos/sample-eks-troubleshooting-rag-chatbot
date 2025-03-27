@@ -4,6 +4,8 @@ from clients.llm_client import encode_query, construct_prompt
 from clients.opensearch_client import OpenSearchClient
 from clients.kubernetes_client import generate_response_with_kubectl
 
+opensearch_client = OpenSearchClient()
+
 # Create the chatbot interface that will be called.
 def chatbot_interface(user_input, model_choice, index_date):
     # Transform to the desired format YYYYMMDD
@@ -12,7 +14,6 @@ def chatbot_interface(user_input, model_choice, index_date):
     logger.info(f"Received user query for date: {index_date}, model: {model_choice}, and user input:\n {user_input}\n")
     query_embedding = encode_query(user_input)
 
-    opensearch_client = OpenSearchClient()
     retrieved_docs = opensearch_client.retrieve_documents(query_embedding=query_embedding, index_name=index_name)
 
     if retrieved_docs is not None:
