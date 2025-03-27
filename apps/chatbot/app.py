@@ -8,6 +8,18 @@ opensearch_client = OpenSearchClient()
 
 # Create the chatbot interface that will be called.
 def chatbot_interface(user_input, model_choice, index_date):
+    """
+    Handles the chatbot interface logic, processes the user query, retrieves relevant documents,
+    constructs a prompt for the selected model, and returns the response.
+
+    Parameters:
+        user_input (str): The user's input query.
+        model_choice (str): The selected model for generating the response ("Claude Sonnet" or "DeepSeek").
+        index_date (datetime): The date for which to query the logs, used to form the index name.
+
+    Returns:
+        str: The model's response to the user's query, or an error message if no match is found.
+    """
     # Transform to the desired format YYYYMMDD
     formatted_date = index_date.strftime("%Y%m%d")
     index_name = f"eks-cluster-{formatted_date}"
@@ -19,7 +31,7 @@ def chatbot_interface(user_input, model_choice, index_date):
     if retrieved_docs is not None:
         prompt = construct_prompt(query=user_input, retrieved_docs=retrieved_docs)
         # Choose the model based on the combo box selection
-        if model_choice == "Claude":
+        if model_choice == "Claude Sonnet":
             response = generate_response_with_kubectl(prompt, "claude")
         elif model_choice == "DeepSeek":
             response = generate_response_with_kubectl(prompt, "deepseek")
@@ -31,6 +43,10 @@ def chatbot_interface(user_input, model_choice, index_date):
 
 
 def create_interface():
+    """
+    Creates and returns the Gradio interface for the chatbot, including UI elements like the date picker,
+    model selection dropdown, user input textbox, and output area.
+    """
     with gr.Blocks(css=".container { max-width: 700px; margin: auto; padding-top: 20px; }") as demo:
         gr.Markdown(
             """
@@ -51,8 +67,8 @@ def create_interface():
 
                 # Add the model selection combo box
                 model_dropdown = gr.Dropdown(
-                    choices=["Claude", "DeepSeek"],
-                    value="Claude",
+                    choices=["Claude Sonnet", "DeepSeek"],
+                    value="Claude Sonnet",
                     label="Select Model"
                 )
 

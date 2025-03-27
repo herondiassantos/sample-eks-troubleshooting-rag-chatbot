@@ -5,15 +5,30 @@ from utils.logger import logger
 
 
 class OpenSearchClient:
+    """
+    A client for interacting with OpenSearch, including querying documents with embeddings and credential management.
+
+    Attributes:
+        region (str): The AWS region in which OpenSearch is located.
+        opensearch_endpoint (str): The endpoint URL for the OpenSearch service.
+        client (OpenSearch): The OpenSearch client instance.
+        credentials (boto3.Session.Credentials): The AWS credentials used for authentication.
+    """
     def __init__(self):
+        """
+        Initializes the OpenSearch client by retrieving necessary environment variables and credentials.
+        """
         self.region = os.environ.get('AWS_DEFAULT_REGION')
         self.opensearch_endpoint = os.environ.get('OPENSEARCH_ENDPOINT')
         self.client = None
         self.credentials = None
-        self.last_refresh = None
         self.initialize_client()
 
     def initialize_client(self):
+        """
+        Initializes the OpenSearch client and sets up AWS authentication using AWS4Auth.
+        Retrieves AWS credentials and refreshes the OpenSearch client connection with the updated credentials.
+        """
         self.credentials = boto3.Session().get_credentials()
         logger.debug("Refreshing OpenSearch credentials")
         auth = AWS4Auth(
@@ -33,12 +48,29 @@ class OpenSearchClient:
         )
 
     def check_and_refresh_credentials(self):
-        """Check if credentials need to be refreshed and refresh if necessary"""
+        """
+        Checks whether the AWS credentials need to be refreshed and refreshes them if necessary.
+
+        This method will automatically call `initialize_client()` if the credentials are determined
+        to be expired or invalid.
+        """
         if self.credentials.refresh_needed():
             self.initialize_client()
 
     def retrieve_documents(self, query_embedding, index_name, top_k=5, min_score=0.4):
-        """Retrieve documents with automatic credential refresh"""
+        """
+        Retrieves documents from OpenSearch based on a query embedding.
+
+        Parameters:
+            query_embedding (list): The query embedding (vector) used for KNN search.
+            index_name (str): The OpenSearch index to query.
+            top_k (int, optional): The number of top results to retrieve. Default is 5.
+            min_score (float, optional): The minimum score threshold for results. Default is 0.4.
+
+        Returns:
+            list: A list of document logs that match the query, or `None` if no results are found or an error occurs.
+        """
+
         self.check_and_refresh_credentials()
 
         query_body = {
