@@ -1,24 +1,22 @@
 import gradio as gr
-from logger import logger
-from datetime import datetime
-from llm_client import encode_query
-from retriever import retrieve_documents, construct_prompt
-from kubernetes_resource import generate_response_with_kubectl
+from utils.logger import logger
+from clients.llm_client import encode_query, construct_prompt
+from clients.opensearch_client import OpenSearchClient
+from clients.kubernetes_client import generate_response_with_kubectl
 
 # Create the chatbot interface that will be called.
 def chatbot_interface(user_input, model_choice, index_date):
     # Transform to the desired format YYYYMMDD
     formatted_date = index_date.strftime("%Y%m%d")
     index_name = f"eks-cluster-{formatted_date}"
-    logger.info(f"Received user query for date: {index_date.strftime("%Y-%m-%d")}, model: {model_choice}, and user input: {user_input}")
+    logger.info(f"Received user query for date: {index_date}, model: {model_choice}, and user input:\n {user_input}\n")
     query_embedding = encode_query(user_input)
 
-    retrieved_docs = retrieve_documents(query_embedding=query_embedding, index_name=index_name)
+    opensearch_client = OpenSearchClient()
+    retrieved_docs = opensearch_client.retrieve_documents(query_embedding=query_embedding, index_name=index_name)
 
     if retrieved_docs is not None:
         prompt = construct_prompt(query=user_input, retrieved_docs=retrieved_docs)
-        logger.info(f"Troubleshooting Prompt: {prompt}")
-
         # Choose the model based on the combo box selection
         if model_choice == "Claude":
             response = generate_response_with_kubectl(prompt, "claude")
@@ -26,8 +24,6 @@ def chatbot_interface(user_input, model_choice, index_date):
             response = generate_response_with_kubectl(prompt, "deepseek")
         else:
             response = "Invalid model selection"
-
-        logger.info(f"Generated response: {response}")
         return response
     else:
         return "No match for the prompt found in the vector database!"

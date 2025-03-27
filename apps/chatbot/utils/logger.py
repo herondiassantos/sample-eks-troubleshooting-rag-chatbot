@@ -12,7 +12,7 @@ logger.setLevel(log_level)  # Set log level from the environment variable
 console_handler = logging.StreamHandler()
 
 # Create a formatter and set it for the handler
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+formatter = logging.Formatter('[%(levelname)s] %(asctime)s - %(message)s')
 console_handler.setFormatter(formatter)
 
 # Add the handler to the logger

@@ -2,7 +2,7 @@ import boto3
 import json
 import requests
 import os
-from logger import logger
+from utils.logger import logger
 
 
 def encode_query(query):
@@ -26,12 +26,6 @@ def encode_query(query):
 
 
 def invoke_claude(prompt_text):
-    """
-    Invokes the Claude model via Bedrock with the given prompt text.
-    
-    :param prompt_text: The input prompt for the model.
-    :return: The response from the Claude model.
-    """
     # Initialize the Bedrock client
     bedrock_client = boto3.client(service_name='bedrock-runtime')
 
@@ -59,21 +53,22 @@ def invoke_claude(prompt_text):
         accept='application/json',
         body=json.dumps(body)
     )
-    
+
     # Parse the model's response
     response_body = json.loads(response['body'].read())
     response_text = response_body['content'][0]['text']
-    
+
     return response_text
+
 
 def invoke_deepseek_vllm(prompt_text):
     url = os.getenv("VLLM_ENDPOINT", "http://deepseek-gpu-vllm-chart.deepseek.svc.cluster.local:80")
     url_complete = f"{url}/v1/chat/completions"
-    
+
     headers = {
         "Content-Type": "application/json"
     }
-    
+
     payload = {
         "model": "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
         "messages": [
@@ -86,23 +81,23 @@ def invoke_deepseek_vllm(prompt_text):
 
     try:
         response = requests.post(url_complete, headers=headers, json=payload)
-        
+
         # Log detailed debug information
         logger.debug(f"Request URL: {url_complete}")
         logger.debug(f"Request Headers: {headers}")
         logger.debug(f"Request Payload: {json.dumps(payload, indent=2)}")
         logger.debug(f"Response Status Code: {response.status_code}")
         logger.debug(f"Response Headers: {dict(response.headers)}")
-        
+
         try:
             logger.info(f"Response Body: {response.text}")
         except:
             logger.error("Could not print response body")
 
         response.raise_for_status()
-        
+
         result = response.json()
-        
+
         if "choices" in result and len(result["choices"]) > 0:
             return result["choices"][0]["message"]["content"]
         else:
@@ -122,4 +117,11 @@ def invoke_deepseek_vllm(prompt_text):
         return f"Unexpected error: {str(e)}"
 
 
-    
+def construct_prompt(query, retrieved_docs):
+    if not retrieved_docs:
+        context = "No relevant logs found."
+    else:
+        context = "\n".join(retrieved_docs)
+
+    kubectl_prompt = "When needed Generate a kubectl command to get more details about the relevant logs, use a key 'KUBECTL_COMMAND: command' if true for to parse, make sure that you have real pod names not templates"
+    return f"Instructions: {kubectl_prompt} \n\nUser Query: {query} \n\nContext:\n{context}\n\nResponse:"

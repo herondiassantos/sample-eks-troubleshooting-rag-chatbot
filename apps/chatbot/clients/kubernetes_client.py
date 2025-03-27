@@ -1,8 +1,8 @@
 import re
 import subprocess
 import shlex
-from llm_client import invoke_claude, invoke_deepseek_vllm
-from logger import logger
+from clients.llm_client import invoke_claude, invoke_deepseek_vllm
+from utils.logger import logger
 
 
 def extract_kubectl_commands(response_text):
@@ -86,12 +86,14 @@ def generate_response_with_kubectl(prompt_text, model_option="deepseek"):
     else:
         initial_response = invoke_deepseek_vllm(prompt_text)
 
+    logger.debug(f"Initial Response:\n{initial_response}\n")
+
     # Step 2: Extract any kubectl commands from the model's response
     kubectl_commands = extract_kubectl_commands(initial_response)
-    logger.debug(kubectl_commands)
     # Step 3: If kubectl commands are found, execute them
     kubectl_output = []
     if kubectl_commands:
+        logger.debug(f"Parsed commands:\n{kubectl_commands}\n")
         for command in kubectl_commands:
             output = execute_kubectl_command(command)
             kubectl_output.append(f"Output of '{command}':\n{output}")
@@ -110,6 +112,7 @@ def generate_response_with_kubectl(prompt_text, model_option="deepseek"):
         else:
             final_response = invoke_deepseek_vllm(followup_prompt)
 
+        logger.debug(f"Final Response:\n{initial_response}\n")
         return final_response
 
     # If no kubectl commands were found, return the initial response

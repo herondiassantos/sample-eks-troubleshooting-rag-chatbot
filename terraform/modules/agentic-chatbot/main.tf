@@ -112,10 +112,10 @@ resource "null_resource" "docker_push" {
     docker_file = filemd5("${path.module}/../../../apps/chatbot/Dockerfile")
     app = filemd5("${path.module}/../../../apps/chatbot/app.py")
     requirements = filemd5("${path.module}/../../../apps/chatbot/requirements.txt")
-    llm_client = filemd5("${path.module}/../../../apps/chatbot/llm_client.py")
-    kubernetes_resource = filemd5("${path.module}/../../../apps/chatbot/kubernetes_resource.py")
-    retriever = filemd5("${path.module}/../../../apps/chatbot/retriever.py")
-    logger = filemd5("${path.module}/../../../apps/chatbot/logger.py")
+    llm_client = filemd5("${path.module}/../../../apps/chatbot/clients/llm_client.py")
+    kubernetes_client = filemd5("${path.module}/../../../apps/chatbot/clients/kubernetes_client.py")
+    opensearch_client = filemd5("${path.module}/../../../apps/chatbot/clients/opensearch_client.py")
+    logger = filemd5("${path.module}/../../../apps/chatbot/utils/logger.py")
   }
 
   provisioner "local-exec" {
