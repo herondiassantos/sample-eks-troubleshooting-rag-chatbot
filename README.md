@@ -39,7 +39,7 @@ First, you need to provision the necessary AWS resources.
 3. Run install script to initialize and install terraform modules.
 
     ```bash
-    cd terraform/
+    cd sample-eks-troubleshooting-rag-chatbot/terraform/
 
     ./install.sh
     ```
