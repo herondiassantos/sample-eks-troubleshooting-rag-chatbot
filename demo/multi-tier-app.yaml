@@ -1,0 +1,399 @@
+---
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo-app
+---
+# Redis Database (Backend)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-db
+  namespace: demo-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-db
+  template:
+    metadata:
+      labels:
+        app: redis-db
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: demo-app
+spec:
+  selector:
+    app: redis-db
+  ports:
+  - port: 6379
+    targetPort: 6379
+---
+# Backend API with issues
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-api
+  namespace: demo-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend-api
+  template:
+    metadata:
+      labels:
+        app: backend-api
+    spec:
+      containers:
+      - name: api
+        image: node:18-alpine
+        workingDir: /app
+        command: ["/bin/sh"]
+        args:
+        - "-c"
+        - |
+          echo "Starting backend API setup..."
+          cat > package.json << 'EOF'
+          {
+            "name": "demo-api",
+            "version": "1.0.0",
+            "dependencies": {
+              "express": "^4.18.0",
+              "redis": "^4.6.0"
+            }
+          }
+          EOF
+          cat > server.js << 'EOF'
+          const express = require('express');
+          const redis = require('redis');
+          const app = express();
+          
+          console.log('Starting API server...');
+          console.log('Attempting to connect to Redis at: redis-wrong-service:6379');
+          
+          // Issue 1: Wrong Redis service name - FAIL ON STARTUP
+          const client = redis.createClient({
+            socket: {
+              host: 'redis-wrong-service',
+              port: 6379,
+              connectTimeout: 5000
+            }
+          });
+          
+          client.on('error', (err) => {
+            console.error('REDIS CONNECTION ERROR:', err.message);
+            console.error('Failed to connect to redis-wrong-service:6379');
+            console.error('Check if Redis service name is correct');
+            console.error('APPLICATION WILL EXIT DUE TO REDIS CONNECTION FAILURE');
+            process.exit(1);
+          });
+          
+          client.on('connect', () => {
+            console.log('Successfully connected to Redis');
+          });
+          
+          // Test Redis connection on startup - FAIL IF NOT WORKING
+          async function initializeRedis() {
+            try {
+              console.log('Testing Redis connection on startup...');
+              await client.connect();
+              console.log('Redis connection successful - starting web server');
+              await client.disconnect();
+            } catch (err) {
+              console.error('STARTUP FAILED: Cannot connect to Redis');
+              console.error('Error:', err.message);
+              console.error('Service name: redis-wrong-service (should be redis-service)');
+              console.error('Exiting application...');
+              process.exit(1);
+            }
+          }
+          
+          app.get('/health', (req, res) => {
+            console.log('Health check requested');
+            res.json({status: 'ok'});
+          });
+          
+          app.get('/data', async (req, res) => {
+            console.log('API data requested');
+            try {
+              console.log('Attempting Redis connection...');
+              await client.connect();
+              console.log('Redis connected, setting test data');
+              await client.set('test', 'value');
+              await client.disconnect();
+              console.log('Redis operation successful');
+              res.json({data: 'success'});
+            } catch (err) {
+              console.error('API ERROR:', err.message);
+              console.error('Redis operation failed');
+              res.status(500).json({error: err.message});
+            }
+          });
+          
+          // Graceful shutdown
+          process.on('SIGTERM', () => {
+            console.log('Received SIGTERM, shutting down gracefully');
+            process.exit(0);
+          });
+          
+          process.on('uncaughtException', (err) => {
+            console.error('UNCAUGHT EXCEPTION:', err.message);
+            console.error('Stack:', err.stack);
+            process.exit(1);
+          });
+          
+          // Initialize Redis first, then start server
+          initializeRedis().then(() => {
+            app.listen(3000, () => {
+              console.log('API server running on port 3000');
+              console.log('Ready to accept requests');
+            });
+          });
+          EOF
+          echo "Installing dependencies..."
+          npm install
+          echo "Starting Node.js server..."
+          node server.js
+        ports:
+        - containerPort: 3000
+        resources:
+          requests:
+            memory: "32Mi"  # Issue 2: Too low memory
+            cpu: "10m"
+          limits:
+            memory: "64Mi"
+            cpu: "50m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: demo-app
+spec:
+  selector:
+    app: backend-api
+  ports:
+  - port: 3000
+    targetPort: 3000
+---
+# Frontend with wrong backend port
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-web
+  namespace: demo-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend-web
+  template:
+    metadata:
+      labels:
+        app: frontend-web
+    spec:
+      containers:
+      - name: web
+        image: nginx:1.25-alpine
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: html-content
+          mountPath: /usr/share/nginx/html
+        - name: nginx-config
+          mountPath: /etc/nginx/conf.d
+      volumes:
+      - name: html-content
+        configMap:
+          name: html-content
+      - name: nginx-config
+        configMap:
+          name: nginx-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  namespace: demo-app
+data:
+  default.conf: |
+    server {
+        listen 80;
+        location / {
+            root /usr/share/nginx/html;
+            index index.html;
+        }
+        location /api/ {
+            # Issue 3: Wrong port (should be 3000)
+            proxy_pass http://backend-service:8080/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+        }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: html-content
+  namespace: demo-app
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Multi-Tier Demo App</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
+            .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+            h1 { color: #333; text-align: center; }
+            button { background: #007bff; color: white; border: none; padding: 12px 24px; border-radius: 4px; cursor: pointer; font-size: 16px; margin: 10px 5px; }
+            button:hover { background: #0056b3; }
+            #result { margin-top: 20px; padding: 15px; border-radius: 4px; min-height: 50px; }
+            .success { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+            .error { background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
+            .info { background: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460; }
+            .status { margin-top: 20px; }
+            .status-item { margin: 10px 0; padding: 10px; border-radius: 4px; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Multi-Tier Demo App</h1>
+            <p>This demo shows a 3-tier application: Frontend (Nginx) to Backend (Node.js) to Database (Redis)</p>
+            
+            <div>
+                <button onclick="testHealth()">Test Health</button>
+                <button onclick="testAPI()">Test API Data</button>
+                <button onclick="checkStatus()">Check All Status</button>
+            </div>
+            
+            <div id="result" class="info">Click a button to test the application...</div>
+            
+            <div class="status">
+                <h3>Expected Issues (for troubleshooting demo):</h3>
+                <div class="status-item error">X Backend API: Wrong Redis service name</div>
+                <div class="status-item error">X Backend API: Insufficient memory limits</div>
+                <div class="status-item error">X Frontend: Wrong backend port in nginx config</div>
+                <div class="status-item error">X Monitoring: ImagePullBackOff error</div>
+            </div>
+        </div>
+        
+        <script>
+        function updateResult(content, type = 'info') {
+            const result = document.getElementById('result');
+            result.innerHTML = content;
+            result.className = type;
+        }
+        
+        async function testHealth() {
+            updateResult('Testing health endpoint...', 'info');
+            try {
+                const response = await fetch('/api/health');
+                if (response.ok) {
+                    const data = await response.json();
+                    updateResult('SUCCESS: Health check passed: ' + JSON.stringify(data), 'success');
+                } else {
+                    updateResult('FAILED: Health check failed: HTTP ' + response.status, 'error');
+                }
+            } catch (err) {
+                updateResult('ERROR: Health check error: ' + err.message + '<br><br>This likely means nginx cannot reach the backend on port 8080 (should be 3000)', 'error');
+            }
+        }
+        
+        async function testAPI() {
+            updateResult('Testing API data endpoint...', 'info');
+            try {
+                const response = await fetch('/api/data');
+                if (response.ok) {
+                    const data = await response.json();
+                    updateResult('SUCCESS: API test passed: ' + JSON.stringify(data), 'success');
+                } else {
+                    const errorText = await response.text();
+                    updateResult('FAILED: API test failed: HTTP ' + response.status + '<br>' + errorText, 'error');
+                }
+            } catch (err) {
+                updateResult('ERROR: API test error: ' + err.message + '<br><br>This likely means nginx cannot reach the backend on port 8080 (should be 3000)', 'error');
+            }
+        }
+        
+        async function checkStatus() {
+            updateResult('Checking all endpoints...', 'info');
+            let results = [];
+            
+            // Test health
+            try {
+                const healthResponse = await fetch('/api/health');
+                results.push(healthResponse.ok ? 'SUCCESS: Health: OK' : 'FAILED: Health: Failed');
+            } catch (err) {
+                results.push('ERROR: Health: Connection Error');
+            }
+            
+            // Test API
+            try {
+                const apiResponse = await fetch('/api/data');
+                results.push(apiResponse.ok ? 'SUCCESS: API Data: OK' : 'FAILED: API Data: Failed');
+            } catch (err) {
+                results.push('ERROR: API Data: Connection Error');
+            }
+            
+            updateResult(results.join('<br>') + '<br><br>Use the troubleshooting agent to fix these issues!', 'info');
+        }
+        
+        // Auto-check status on load
+        window.onload = () => {
+            setTimeout(checkStatus, 1000);
+        };
+        </script>
+    </body>
+    </html>
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  namespace: demo-app
+spec:
+  type: LoadBalancer
+  selector:
+    app: frontend-web
+  ports:
+  - port: 80
+    targetPort: 80
+---
+# Issue 4: ImagePullBackOff
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: monitoring-agent
+  namespace: demo-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: monitoring-agent
+  template:
+    metadata:
+      labels:
+        app: monitoring-agent
+    spec:
+      containers:
+      - name: agent
+        image: nonexistent/monitoring:latest

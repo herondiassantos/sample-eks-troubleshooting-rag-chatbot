@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "k8s-troubleshooting-agent.fullname" . }}-config
+  labels:
+    {{- include "k8s-troubleshooting-agent.labels" . | nindent 4 }}
+data:
+  .env: |
+    CLUSTER_NAME="{{ .Values.config.clusterName }}"
+    SLACK_BOT_TOKEN="{{ .Values.secrets.slack.botToken }}"
+    SLACK_APP_TOKEN="{{ .Values.secrets.slack.appToken }}"
+    SLACK_SIGNING_SECRET="{{ .Values.secrets.slack.signingSecret }}"
+    AWS_REGION="{{ .Values.config.awsRegion }}"
+    BEDROCK_MODEL_ID="{{ .Values.config.bedrockModelId }}"
+    LOG_LEVEL="{{ .Values.config.logLevel }}"
+    ENABLE_EKS_MCP="{{ .Values.config.eksMcp.enabled }}"
+    EKS_MCP_ALLOW_WRITE="{{ .Values.config.eksMcp.allowWrite }}"
+    AGENT_NAME="strands-slack-agent"
+    AGENT_DESCRIPTION="An intelligent agent that analyzes Slack conversations and responds when appropriate"
+    LOG_FORMAT="json"
+    RESPONSE_THRESHOLD="0.7"
+    MAX_CONTEXT_MESSAGES="10"
+    RESPONSE_DELAY_SECONDS="2"
+    ENABLE_THREAD_CONTEXT="true"
+    ENABLE_CHANNEL_MONITORING="true"
+    ENABLE_DM_RESPONSES="true"
+    ENABLE_MENTION_RESPONSES="true"

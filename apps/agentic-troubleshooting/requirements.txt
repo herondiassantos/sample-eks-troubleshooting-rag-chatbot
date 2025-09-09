@@ -1,0 +1,18 @@
+# Core framework
+strands-agents>=1.1.0
+strands-agents-tools>=0.2.6
+
+# MCP support
+mcp
+
+# Slack integration
+slack-sdk>=3.26.0
+slack-bolt>=1.18.0
+
+# AWS and K8s
+boto3>=1.34.0
+kubernetes>=28.1.0
+
+# Utilities
+python-dotenv>=1.0.0
+faiss-cpu
