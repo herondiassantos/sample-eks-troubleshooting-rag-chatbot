@@ -252,7 +252,7 @@ The agentic deployment will automatically:
 3. Query the chatbot about EKS issues
 
 ### Strands Agentic Deployment
-See [demo/](demo/) folder for complete testing instructions and example scenarios.
+See [Demo Script](demo/demo-script.md) for complete testing instructions and example scenarios.
 
 ## Cleanup
 
