@@ -83,16 +83,9 @@ class OrchestratorAgent:
 
     def respond(self, message: str, thread_id: str, context: str = None) -> str:
         """Main entry point for responses."""
-        channel_id = thread_id.split(':')[0] if ':' in thread_id else thread_id
-        
-        prompt = f"""User Message: "{message}"
-Channel: {channel_id}
-Thread Context: {context or "No previous context"}
-
-Analyze the FULL context and provide a direct, actionable response. Do not ask follow-up questions unless absolutely critical information is missing."""
-        
         try:
-            return str(self.agent(prompt))
+            response = str(self.agent(message)).strip()
+            return response if response else "I'm here to help with Kubernetes troubleshooting. How can I assist you?"
         except Exception as e:
             logger.error(f"Orchestrator error: {e}")
             return "Error processing request. Please try again."
@@ -110,10 +103,9 @@ Analyze the FULL context and provide a direct, actionable response. Do not ask f
             return f"Memory error: {e}"
 
     @tool
-    def troubleshoot_k8s(self, query: str, context: str = None, channel_id: str = None) -> str:
+    def troubleshoot_k8s(self, query: str) -> str:
         """Perform K8s troubleshooting."""
         try:
-            solution = self.k8s_specialist.troubleshoot(query, context)
-            return solution
+            return self.k8s_specialist.troubleshoot(query)
         except Exception as e:
             return f"Troubleshooting error: {e}"

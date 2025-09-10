@@ -86,29 +86,14 @@ class K8sSpecialist:
             tools=tools
         )
     
-    def troubleshoot(self, issue: str, context: str = None) -> str:
+    def troubleshoot(self, issue: str) -> str:
         """Troubleshoot a K8s issue with EKS cluster context."""
         try:
-            # Always include context when available
-            if context and context != "No previous context":
-                base_prompt = f"""K8s Issue: {issue}
-
-Thread Context: {context}
-
-Based on the full conversation context, investigate and provide a direct solution."""
-            else:
-                base_prompt = f"K8s Issue: {issue}\n\nInvestigate and provide a direct solution."
-            
-            # Use EKS MCP client context if available
             if self.eks_mcp_client:
                 with self.eks_mcp_client:
-                    response = self.agent(base_prompt)
-                    return str(response).strip()
+                    return str(self.agent(issue)).strip()
             else:
-                # Fallback to local tools only
-                response = self.agent(base_prompt)
-                return str(response).strip()
-                
+                return str(self.agent(issue)).strip()
         except Exception as e:
             logger.error(f"Error troubleshooting: {e}")
             return "Error during troubleshooting. Please try again."
