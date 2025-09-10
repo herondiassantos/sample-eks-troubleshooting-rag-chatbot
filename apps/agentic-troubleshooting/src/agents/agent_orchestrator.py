@@ -84,7 +84,22 @@ class OrchestratorAgent:
     def respond(self, message: str, thread_id: str, context: str = None) -> str:
         """Main entry point for responses."""
         try:
-            response = str(self.agent(message)).strip()
+            # Get the agent response
+            agent_response = self.agent(message)
+            
+            # Handle different response types from Strands agent
+            if hasattr(agent_response, 'content'):
+                response = str(agent_response.content).strip()
+            elif hasattr(agent_response, 'text'):
+                response = str(agent_response.text).strip()
+            elif isinstance(agent_response, (list, tuple)):
+                # If it's a list/tuple, join all parts
+                response = ' '.join(str(part) for part in agent_response).strip()
+            else:
+                response = str(agent_response).strip()
+            
+            logger.info(f"Full agent response: {response[:200]}..." if len(response) > 200 else f"Full agent response: {response}")
+            
             return response if response else "I'm here to help with Kubernetes troubleshooting. How can I assist you?"
         except Exception as e:
             logger.error(f"Orchestrator error: {e}")

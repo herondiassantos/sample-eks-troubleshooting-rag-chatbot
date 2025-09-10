@@ -20,6 +20,8 @@ class K8sSpecialist:
         """Initialize the K8s specialist with EKS MCP integration."""
         # Start with local K8s tools
         tools = [describe_pod, get_pods]
+        self.eks_mcp_client = None
+        self._mcp_connected = False
         
         # Add EKS MCP server if enabled
         if Config.ENABLE_EKS_MCP:
@@ -64,17 +66,16 @@ class K8sSpecialist:
                     )
                 ))
                 
-                # Get EKS MCP tools and add to tools list
-                with self.eks_mcp_client:
-                    eks_tools = self.eks_mcp_client.list_tools_sync()
-                    tools.extend(eks_tools)
-                    logger.info(f"Added {len(eks_tools)} EKS MCP tools")
+                # Connect and get EKS MCP tools
+                self.eks_mcp_client.__enter__()
+                self._mcp_connected = True
+                eks_tools = self.eks_mcp_client.list_tools_sync()
+                tools.extend(eks_tools)
+                logger.info(f"Added {len(eks_tools)} EKS MCP tools with persistent connection")
                     
             except Exception as e:
                 logger.warning(f"Failed to initialize EKS MCP: {e}")
                 self.eks_mcp_client = None
-        else:
-            self.eks_mcp_client = None
         
         cluster_info = f"Cluster: {getattr(Config, 'CLUSTER_NAME', 'unknown')} in region {Config.AWS_REGION}\n"
         
@@ -89,11 +90,15 @@ class K8sSpecialist:
     def troubleshoot(self, issue: str) -> str:
         """Troubleshoot a K8s issue with EKS cluster context."""
         try:
-            if self.eks_mcp_client:
-                with self.eks_mcp_client:
-                    return str(self.agent(issue)).strip()
-            else:
-                return str(self.agent(issue)).strip()
+            return str(self.agent(issue)).strip()
         except Exception as e:
             logger.error(f"Error troubleshooting: {e}")
             return "Error during troubleshooting. Please try again."
+    
+    def __del__(self):
+        """Clean up MCP connection."""
+        if self._mcp_connected and self.eks_mcp_client:
+            try:
+                self.eks_mcp_client.__exit__(None, None, None)
+            except:
+                pass
