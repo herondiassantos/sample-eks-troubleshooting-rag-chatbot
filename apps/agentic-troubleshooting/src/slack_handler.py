@@ -91,8 +91,8 @@ class SlackHandler:
                     if is_active_thread:
                         logger.info(f"Message is in active thread: {thread_key}")
                 
-                # Check if agent should respond
-                should_respond = self.orchestrator.should_respond(text, is_mention) or is_active_thread
+                # Check if agent should respond (pass thread info to avoid unnecessary classification)
+                should_respond = self.orchestrator.should_respond(text, is_mention, is_active_thread) or is_active_thread
                 logger.info(f"Agent should respond: {should_respond} for message: '{text[:50]}...' (active_thread: {is_active_thread})")
                 if not should_respond:
                     logger.info("Agent decided not to respond to this message")

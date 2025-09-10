@@ -8,6 +8,7 @@ import os
 import boto3
 from src.tools.k8s_tools import describe_pod, get_pods
 from src.config.settings import Config
+from src.prompts import K8S_SPECIALIST_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -77,16 +78,7 @@ class K8sSpecialist:
         
         cluster_info = f"Cluster: {getattr(Config, 'CLUSTER_NAME', 'unknown')} in region {Config.AWS_REGION}\n"
         
-        self.system_prompt = (
-            f"{cluster_info}"
-            "You are a direct Kubernetes troubleshooting expert with EKS cluster access. "
-            "Use available tools to investigate issues:\n"
-            "- get_pods: List pods and their status\n"
-            "- describe_pod: Get detailed pod information\n"
-            "- EKS MCP tools: Cluster management and diagnostics\n\n"
-            f"{'Use both read and write operations' if Config.EKS_MCP_ALLOW_WRITE else 'Only use read operations'} with EKS tools. "
-            "Provide direct, actionable solutions. Do not ask follow-up questions unless critical information is missing."
-        )
+        self.system_prompt = f"{cluster_info}{K8S_SPECIALIST_SYSTEM_PROMPT}"
         
         self.agent = Agent(
             system_prompt=self.system_prompt,

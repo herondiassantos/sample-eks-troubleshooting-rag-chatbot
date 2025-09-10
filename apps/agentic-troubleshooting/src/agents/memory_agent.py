@@ -5,6 +5,7 @@ import json
 import boto3
 from strands import Agent, tool
 from src.config.settings import Config
+from src.prompts import MEMORY_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -85,15 +86,8 @@ class MemoryAgent:
     """K8s troubleshooting memory agent using S3 Vectors."""
     
     def __init__(self):
-        system_prompt = """You are a K8s troubleshooting memory assistant.
-You help store and retrieve troubleshooting solutions using vector search.
-
-For storing solutions: Use store_solution with query and solution.
-For retrieving solutions: Use retrieve_solutions with the problem query.
-"""
-        
         self.agent = Agent(
-            system_prompt=system_prompt,
+            system_prompt=MEMORY_SYSTEM_PROMPT,
             model=Config.BEDROCK_MODEL_ID,
             tools=[store_solution, retrieve_solutions]
         )
