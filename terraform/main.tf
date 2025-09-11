@@ -1,3 +1,12 @@
+terraform {
+  required_providers {
+    kubectl = {
+      source  = "alekc/kubectl"
+      version = ">= 2.0.2"
+    }
+  }
+}
+
 locals {
   name   = var.name
   region = "us-east-1"
@@ -52,6 +61,18 @@ provider "helm" {
   }
 }
 
+provider "kubectl" {
+  host                   = module.eks.cluster_endpoint
+  cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
+  load_config_file       = false
+
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    args = ["eks", "get-token", "--cluster-name", module.eks.cluster_name]
+  }
+}
+
 data "aws_ecrpublic_authorization_token" "token" {
   provider = aws.ecr
 }
@@ -103,6 +124,8 @@ module "eks" {
 # EKS Blueprints Addons
 ################################################################################
 module "iam_eks_role" {
+  count = var.deployment_type == "rag" ? 1 : 0
+  
   source    = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
   version   = "~> 5.33.0"
   role_name = "${local.name}-fluentbit-role"
@@ -154,7 +177,8 @@ module "eks_blueprints_addons" {
     iam_role_use_name_prefix = false
   }
 
-  helm_releases = {
+  # Conditional helm releases based on deployment type
+  helm_releases = var.deployment_type == "rag" ? {
     fluentbit = {
       name             = "fluentbit"
       description      = "Fluentbit log collector"
@@ -168,7 +192,7 @@ module "eks_blueprints_addons" {
             create: true
             name: "fluentbit-sa"
             annotations:
-                eks.amazonaws.com/role-arn: "${module.iam_eks_role.iam_role_arn}"
+                eks.amazonaws.com/role-arn: "${module.iam_eks_role[0].iam_role_arn}"
 
           rbac:
             create: true
@@ -359,7 +383,7 @@ module "eks_blueprints_addons" {
         EOT
       ]
     }
-  }
+  } : {}
   tags = local.tags
 }
 
@@ -421,8 +445,12 @@ data "local_file" "prometheus_rule" {
   filename = "${path.module}/manifests/prometheus-rule.yaml"
 }
 
-resource "kubernetes_manifest" "prometheus_rule" {
-  manifest = yamldecode(data.local_file.prometheus_rule.content)
+resource "kubectl_manifest" "prometheus_rule" {
+  yaml_body = data.local_file.prometheus_rule.content
+
+  depends_on = [
+    module.eks_blueprints_addons
+  ]
 }
 
 ################################################################################
@@ -457,10 +485,12 @@ module "vpc" {
 }
 
 ################################################################################
-# Logs Ingestion Pipeline
+# Logs Ingestion Pipeline (RAG deployment only)
 ################################################################################
 
 module "ingestion_pipeline" {
+  count = var.deployment_type == "rag" ? 1 : 0
+  
   source = "./modules/ingestion-pipeline"
   name = var.name
   collection_name = var.opensearch_collection_name
@@ -469,14 +499,16 @@ module "ingestion_pipeline" {
 }
 
 ################################################################################
-# Agentic ChatBot
+# Agentic ChatBot (RAG deployment only)
 ################################################################################
 
 module "agentic_chatbot" {
+  count = var.deployment_type == "rag" ? 1 : 0
+  
   source = "./modules/agentic-chatbot"
   name = var.name
   collection_name = var.opensearch_collection_name
-  collection_arn = module.ingestion_pipeline.collection_arn
+  collection_arn = module.ingestion_pipeline[0].collection_arn
   region = local.region
   eks_cluster_oidc_arn = module.eks.oidc_provider_arn
   container_builder = local.container_builder
@@ -484,6 +516,8 @@ module "agentic_chatbot" {
 }
 
 resource "helm_release" "agentic-chatbot" {
+  count = var.deployment_type == "rag" ? 1 : 0
+  
   name             = "agentic-chatbot"
   chart            = "./manifests/chatbot-chart"
   create_namespace = true
@@ -495,17 +529,17 @@ resource "helm_release" "agentic-chatbot" {
     <<-EOT
     logLevel: INFO
     image:
-      repository: ${module.agentic_chatbot.chatbot_ecr_repo}
+      repository: ${module.agentic_chatbot[0].chatbot_ecr_repo}
       pullPolicy: Always
       tag: "latest"
     serviceAccount:
       create: true
       annotations:
-        eks.amazonaws.com/role-arn: ${module.agentic_chatbot.chatbot_role_arn}
+        eks.amazonaws.com/role-arn: ${module.agentic_chatbot[0].chatbot_role_arn}
     aws:
       region: ${local.region}
-      role: ${module.agentic_chatbot.chatbot_role_arn}
-      opensearch_endpoint: ${replace(module.ingestion_pipeline.collection_endpoint,"/(^https://)|(/$)/","")}
+      role: ${module.agentic_chatbot[0].chatbot_role_arn}
+      opensearch_endpoint: ${replace(module.ingestion_pipeline[0].collection_endpoint,"/(^https://)|(/$)/","")}
     resources:
       limits:
         cpu: "1000m"
@@ -543,8 +577,10 @@ resource "helm_release" "karpenter_default" {
     value = local.name
   }
 }
-# Deploy GPU Karpenter resources using Helm
+# Deploy GPU Karpenter resources using Helm (RAG deployment only)
 resource "helm_release" "karpenter_gpu" {
+  count = var.deployment_type == "rag" ? 1 : 0
+  
   name       = "karpenter-gpu"
   chart      = "${path.module}/manifests/karpenter-chart"
   namespace  = "default"
@@ -560,10 +596,12 @@ resource "helm_release" "karpenter_gpu" {
 
 
 ################################################################################
-# DeepSeek Deployment using vLLM
+# DeepSeek Deployment using vLLM (RAG deployment only)
 ################################################################################
 
 resource "helm_release" "deepseek_gpu" {
+  count = var.deployment_type == "rag" ? 1 : 0
+  
   name             = "deepseek-gpu"
   chart            = "./manifests/vllm-chart"
   create_namespace = true
@@ -595,6 +633,8 @@ resource "helm_release" "deepseek_gpu" {
 }
 
 resource "helm_release" "nvidia_device_plugin" {
+  count = var.deployment_type == "rag" ? 1 : 0
+  
   name             = "nvidia-device-plugin"
   repository       = "https://nvidia.github.io/k8s-device-plugin"
   chart            = "nvidia-device-plugin"

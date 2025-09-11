@@ -1,0 +1,87 @@
+replicaCount: 1
+
+image:
+  repository: your-account.dkr.ecr.us-west-2.amazonaws.com/k8s-troubleshooting-agent
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+nameOverride: ""
+fullnameOverride: ""
+
+# EKS Pod Identity configuration (no annotations needed)
+serviceAccount:
+  create: true
+  name: "k8s-troubleshooting-agent"
+
+# Application configuration
+config:
+  clusterName: ""
+  awsRegion: "us-west-2"
+  bedrockModelId: "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+  logLevel: "INFO"
+  
+  # Vector Storage Configuration
+  vectorBucket: "test-vector-s3-bucket-321"
+  indexName: "k8s-troubleshooting"
+  
+  # EKS MCP settings
+  eksMcp:
+    enabled: true
+    allowWrite: false
+    
+  # Slack configuration (use secrets)
+  slack:
+    botToken: ""
+    appToken: ""
+    signingSecret: ""
+
+# Secrets (will be created from values)
+secrets:
+  slack:
+    botToken: ""
+    appToken: ""
+    signingSecret: ""
+
+podAnnotations: {}
+
+podSecurityContext:
+  fsGroup: 1000
+  runAsNonRoot: true
+  runAsUser: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 1000
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# RBAC for Kubernetes API access
+rbac:
+  create: true
+  rules:
+    - apiGroups: [""]
+      resources: ["pods", "services", "events"]
+      verbs: ["get", "list", "watch"]
+    - apiGroups: ["apps"]
+      resources: ["deployments", "replicasets"]
+      verbs: ["get", "list", "watch"]
+    - apiGroups: [""]
+      resources: ["pods/log"]
+      verbs: ["get"]

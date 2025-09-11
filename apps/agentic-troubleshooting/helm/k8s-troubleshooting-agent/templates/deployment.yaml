@@ -1,0 +1,121 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "k8s-troubleshooting-agent.fullname" . }}
+  labels:
+    {{- include "k8s-troubleshooting-agent.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "k8s-troubleshooting-agent.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "k8s-troubleshooting-agent.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "k8s-troubleshooting-agent.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: kubeconfig-init
+          image: amazon/aws-cli:2.15.30
+          command:
+            - /bin/sh
+            - -c
+            - |
+              # Generate kubeconfig using EKS
+              aws eks update-kubeconfig --region {{ .Values.config.awsRegion }} --name {{ .Values.config.clusterName }} --kubeconfig /shared/kubeconfig
+              echo "EKS kubeconfig created successfully"
+          env:
+            - name: AWS_REGION
+              value: {{ .Values.config.awsRegion | quote }}
+          volumeMounts:
+            - name: kubeconfig-volume
+              mountPath: /shared
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: CLUSTER_NAME
+              value: {{ .Values.config.clusterName | quote }}
+            - name: AWS_REGION
+              value: {{ .Values.config.awsRegion | quote }}
+            - name: BEDROCK_MODEL_ID
+              value: {{ .Values.config.bedrockModelId | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
+            - name: ENABLE_EKS_MCP
+              value: {{ .Values.config.eksMcp.enabled | quote }}
+            - name: EKS_MCP_ALLOW_WRITE
+              value: {{ .Values.config.eksMcp.allowWrite | quote }}
+            - name: KUBECONFIG
+              value: /shared/kubeconfig
+            # Vector Storage Configuration
+            - name: VECTOR_BUCKET
+              value: {{ .Values.config.vectorBucket | quote }}
+            - name: INDEX_NAME
+              value: {{ .Values.config.indexName | quote }}
+            - name: SLACK_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "k8s-troubleshooting-agent.fullname" . }}-slack
+                  key: slack-bot-token
+            - name: SLACK_APP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "k8s-troubleshooting-agent.fullname" . }}-slack
+                  key: slack-app-token
+            - name: SLACK_SIGNING_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "k8s-troubleshooting-agent.fullname" . }}-slack
+                  key: slack-signing-secret
+          volumeMounts:
+            - name: kubeconfig-volume
+              mountPath: /shared
+              readOnly: true
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import sys; sys.exit(0)"
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import sys; sys.exit(0)"
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: kubeconfig-volume
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
